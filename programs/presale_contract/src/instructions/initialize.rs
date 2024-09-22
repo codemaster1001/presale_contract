@@ -5,8 +5,8 @@ use anchor_lang::{
 use anchor_spl::{
     associated_token::AssociatedToken,
     token::{self, Token},
-    token_2022::{self, },
-    token_interface::{Mint, TokenAccount, TokenInterface}
+    token_2022::{self},
+    token_interface::{Mint, TokenAccount,  Token2022}
 };
 
 
@@ -16,7 +16,6 @@ use crate::utils::*;
 
 
 #[derive(Accounts)]
-#[instruction(index: u16)]
 pub struct Initialize<'info> {
     #[account(mut)]
     pub creator: Signer<'info>,
@@ -33,13 +32,13 @@ pub struct Initialize<'info> {
     #[account(
         init,
         seeds = [
-            b"presale", creator.key().as_ref()
+            b"presale", token_0_mint.key().as_ref(), token_1_mint.key().as_ref()
         ],
         payer=creator,
-        space= 8 + Presale::INIT_SPACE,
+        space= 8 + PresaleState::INIT_SPACE,
         bump
     )]
-    pub presale_state: Account<'info, Presale>,
+    pub presale_state: Account<'info, PresaleState>,
 
     /// CHECK: Token_0 vault
     #[account(
@@ -72,11 +71,8 @@ pub struct Initialize<'info> {
     )]
     pub creator_token_0: Box<InterfaceAccount<'info, TokenAccount>>,
 
-    pub token_program: Program<'info, Token>,
-
-    pub token_0_program: Interface<'info, TokenInterface>,
-    /// Spl token program or token program 2022
-    pub token_1_program: Interface<'info, TokenInterface>,
+    pub token_0_program: Program<'info, Token2022>,
+    pub token_1_program: Program<'info, Token>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
     pub rent: Sysvar<'info, Rent>,
@@ -90,9 +86,12 @@ pub fn initialize(ctx: Context<Initialize>, index: u16, token_0_amount: u64,pres
     }
 
     let token1_mint_info = ctx.accounts.token_1_mint.to_account_info();
-    if *token1_mint_info.owner != token::Token::id() && *token1_mint_info.key != crate::usdc::id() {
+    if *token1_mint_info.owner != token::Token::id(){
         return Err(ErrorCode::Mint1NotUSDC.into());
     }
+    // if *token1_mint_info.owner != token::Token::id() && *token1_mint_info.key != crate::usdc::id() {
+    //     return Err(ErrorCode::Mint1NotUSDC.into());
+    // }
 
     create_token_account(
         &ctx.accounts.presale_state.to_account_info(),
@@ -107,6 +106,16 @@ pub fn initialize(ctx: Context<Initialize>, index: u16, token_0_amount: u64,pres
             ctx.accounts.token_0_mint.key().as_ref(),
             &[ctx.bumps.token_0_vault][..],
         ][..]],
+    )?;
+
+    transfer_from_user_to_pool_vault(
+        ctx.accounts.creator.to_account_info(),
+        ctx.accounts.creator_token_0.to_account_info(),
+        ctx.accounts.token_0_vault.to_account_info(),
+        ctx.accounts.token_0_mint.to_account_info(),
+        ctx.accounts.token_0_program.to_account_info(),
+        token_0_amount,
+        ctx.accounts.token_0_mint.decimals,
     )?;
 
 
@@ -133,6 +142,8 @@ pub fn initialize(ctx: Context<Initialize>, index: u16, token_0_amount: u64,pres
         token_0_amount: token_0_amount,
         token_1_mint: ctx.accounts.token_1_mint.key(),
         token_1_amount: 0,
+        token_0_vault: ctx.accounts.token_0_vault.key(),
+        token_1_vault: ctx.accounts.token_1_vault.key(),
         presale_price_x32: presale_price_x32
     });
     Ok(())

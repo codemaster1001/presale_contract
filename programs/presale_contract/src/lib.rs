@@ -24,6 +24,10 @@ pub mod presale_contract {
     pub fn initialize(ctx: Context<Initialize>,  index: u16, token_0_amount: u64, presale_price_x32: u64) -> Result<()> {
         instructions::initialize(ctx, index,token_0_amount,presale_price_x32)
     }
+
+    pub fn buy_token0(ctx: Context<BuyToken0>, token1_amount: u64) -> Result<()> {
+        instructions::buy_token0(ctx, token1_amount)
+    }
 }
 
 
